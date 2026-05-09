@@ -12,7 +12,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "LinkTree" },
+      { title: "kinto-io" },
       {
         name: "description",
         content: "A small floating space for links and quiet thoughts.",
@@ -54,7 +54,7 @@ function Index() {
               icon={<Github className="h-5 w-5" />}
               label="GitHub"
               description="open source, side projects, late commits"
-              href="/coming-soon"
+              href="https://github.com/itsdevkinto"
               delay={0.18}
             />
             <SystemLinkCard
