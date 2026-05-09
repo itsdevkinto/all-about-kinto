@@ -5,6 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Send, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+function detectInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|Instagram|Line\/|Twitter|Snapchat/i.test(ua);
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -12,6 +18,12 @@ interface Message {
 }
 
 export function ChatButton({ onClick }: { onClick: () => void }) {
+  const [inApp, setInApp] = useState(false);
+
+  useEffect(() => {
+    setInApp(detectInAppBrowser());
+  }, []);
+
   return (
     <motion.button
       initial={{ opacity: 0, scale: 0.8 }}
@@ -20,13 +32,14 @@ export function ChatButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className={cn(
         "fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full px-4 py-3",
-        "bg-foreground text-background shadow-lg transition-transform duration-300",
+        "bg-foreground text-background shadow-lg transition-transform duration-300 touch-manipulation",
         "hover:scale-105 hover:shadow-xl active:scale-95",
+        inApp && "shadow-[0_20px_60px_-30px_rgba(0,0,0,0.75)]",
       )}
       aria-label="Open chat"
     >
       <MessageCircle className="h-5 w-5" />
-      <span className="text-sm font-medium">Chat with my AI version.</span>
+      <span className="text-sm font-medium">Talk to my AI version.</span>
     </motion.button>
   );
 }

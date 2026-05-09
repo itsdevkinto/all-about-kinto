@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-router";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { InAppHydrationFix } from "@/components/in-app-hydration-fix";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -105,7 +106,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
@@ -123,6 +124,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
+        <InAppHydrationFix />
         <Outlet />
       </ThemeProvider>
     </QueryClientProvider>
