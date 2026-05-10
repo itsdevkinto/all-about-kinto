@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { NativePanel } from "./native-panel";
 import { Button } from "./ui/button";
 import avatar from "@/assets/avatar.jpg";
@@ -6,12 +5,7 @@ import { Mail } from "lucide-react";
 
 export function IdentityCard() {
   return (
-    <NativePanel
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-      className="flex flex-col"
-    >
+    <NativePanel className="animate-fade-up flex flex-col">
       <div className="flex items-center gap-4 border-b border-border-soft pb-4">
         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-full ring-1 ring-border">
           <img
@@ -27,12 +21,7 @@ export function IdentityCard() {
           <p className="text-[13px] text-muted-foreground">Everything with God</p>
         </div>
       </div>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.38, ease: [0.22, 1, 0.36, 1] }}
-        className="flex flex-col gap-3 pt-4"
-      >
+      <div className="animate-fade-in delay-6 flex flex-col gap-3 pt-4">
         <div className="flex items-center gap-4">
           <div className="flex shrink-0 items-center justify-center rounded-lg text-muted-foreground">
             <Mail className="h-5 w-5" />
@@ -50,7 +39,7 @@ export function IdentityCard() {
             Let's connect
           </a>
         </Button>
-      </motion.div>
+      </div>
     </NativePanel>
   );
 }

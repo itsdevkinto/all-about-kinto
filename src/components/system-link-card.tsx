@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import { motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -71,12 +70,21 @@ export function SystemLinkCard({
     isLarge ? "px-5 py-5" : "px-4 py-3.5",
   );
 
+  const delayClass =
+    delay <= 0.12
+      ? "delay-1"
+      : delay <= 0.15
+        ? "delay-2"
+        : delay <= 0.18
+          ? "delay-3"
+          : delay <= 0.24
+            ? "delay-4"
+            : delay <= 0.3
+              ? "delay-5"
+              : "delay-5";
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
-    >
+    <div className={cn("animate-fade-up-sm", delayClass)}>
       {isExternal ? (
         <a href={href} target="_blank" rel="noreferrer" className={className}>
           {cardContent}
@@ -86,6 +94,6 @@ export function SystemLinkCard({
           {cardContent}
         </Link>
       )}
-    </motion.div>
+    </div>
   );
 }

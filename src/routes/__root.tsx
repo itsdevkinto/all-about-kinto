@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -9,8 +10,60 @@ import {
 } from "@tanstack/react-router";
 
 import { ThemeProvider } from "@/components/theme-provider";
-import { InAppHydrationFix } from "@/components/in-app-hydration-fix";
 import appCss from "../styles.css?url";
+
+// Inline script that runs BEFORE React hydrates.
+// Reads saved theme from localStorage and sets the correct class on <html>.
+// This prevents a hydration mismatch that breaks React in FB/Messenger webviews.
+const THEME_INIT_SCRIPT = `
+(function(){
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'dark' || t === 'light') {
+      document.documentElement.className = t;
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.className = 'dark';
+    } else {
+      document.documentElement.className = 'light';
+    }
+  } catch(e) {
+    document.documentElement.className = 'light';
+  }
+})();
+`;
+
+function isFacebookWebview(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV/i.test(ua);
+}
+
+function FbWebviewBanner() {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+
+  return (
+    <div className="fixed top-4 left-4 right-4 z-60 mx-auto max-w-sm rounded-xl border border-border-soft bg-background px-4 py-3 text-sm text-foreground shadow-lg animate-fade-in">
+      <div className="flex items-start gap-3">
+        <p className="flex-1">
+          This site works better in Chrome or Safari. Tap the menu and{" "}
+          <strong>Open in Browser</strong>!
+        </p>
+        <button
+          onClick={() => setDismissed(true)}
+          onTouchEnd={(e) => {
+            e.preventDefault();
+            setDismissed(true);
+          }}
+          className="ml-2 shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label="Dismiss"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function NotFoundComponent() {
   return (
@@ -106,9 +159,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" className="light" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Cloudflare Web Analytics */}
+        <script
+          defer
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon='{"token":"0a03e3834f2b4bf19c4a3c11776f5e20"}'
+        />
+        {/* End Cloudflare Web Analytics */}
       </head>
       <body>
         {children}
@@ -120,12 +181,17 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const [isFb, setIsFb] = useState(false);
+
+  useEffect(() => {
+    setIsFb(isFacebookWebview());
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <InAppHydrationFix />
         <Outlet />
+        {isFb && <FbWebviewBanner />}
       </ThemeProvider>
     </QueryClientProvider>
   );

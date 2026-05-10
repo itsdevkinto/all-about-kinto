@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { motion } from "framer-motion";
 import { Github, Music2, Mail, Link as LinkIcon, Mic, Gamepad2 } from "lucide-react";
 import { AmbientBackground } from "@/components/ambient-background";
 import { ChatButton, ChatModal } from "@/components/chat-modal";
@@ -73,16 +72,11 @@ function Index() {
             />
           </div>
 
-          <motion.footer
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.55 }}
-            className="mt-4 flex items-center justify-center gap-2 text-[11px] text-muted-foreground/70"
-          >
+          <footer className="animate-fade-in delay-7 mt-4 flex items-center justify-center gap-2 text-[11px] text-muted-foreground/70">
             <span>made quietly</span>
             <span className="h-0.5 w-0.5 rounded-full bg-muted-foreground/40" />
             <span>{new Date().getFullYear()}</span>
-          </motion.footer>
+          </footer>
         </FloatingShell>
       </div>
 

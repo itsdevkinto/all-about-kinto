@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { motion } from "framer-motion";
 import { ArrowLeft, Send } from "lucide-react";
 import { AmbientBackground } from "@/components/ambient-background";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -475,13 +474,9 @@ function PokemonGame() {
                   ))}
 
                   {isLoading && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="max-w-[92%] rounded-2xl bg-background px-3.5 py-2.5 text-sm text-foreground"
-                    >
+                    <div className="animate-msg max-w-[92%] rounded-2xl bg-background px-3.5 py-2.5 text-sm text-foreground">
                       thinking…
-                    </motion.div>
+                    </div>
                   )}
 
                   <div ref={messagesEndRef} />

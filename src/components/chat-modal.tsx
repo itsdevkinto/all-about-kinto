@@ -1,15 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { X, Send, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-function detectInAppBrowser(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  return /FBAN|FBAV|Instagram|Line\/|Twitter|Snapchat/i.test(ua);
-}
 
 interface Message {
   id: string;
@@ -18,29 +11,23 @@ interface Message {
 }
 
 export function ChatButton({ onClick }: { onClick: () => void }) {
-  const [inApp, setInApp] = useState(false);
-
-  useEffect(() => {
-    setInApp(detectInAppBrowser());
-  }, []);
-
   return (
-    <motion.button
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4, delay: 0.6, ease: [0.22, 1, 0.36, 1] }}
+    <button
       onClick={onClick}
+      onTouchEnd={(e) => {
+        e.preventDefault();
+        onClick();
+      }}
       className={cn(
         "fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full px-4 py-3",
         "bg-foreground text-background shadow-lg transition-transform duration-300 touch-manipulation",
         "hover:scale-105 hover:shadow-xl active:scale-95",
-        inApp && "shadow-[0_20px_60px_-30px_rgba(0,0,0,0.75)]",
       )}
       aria-label="Open chat"
     >
       <MessageCircle className="h-5 w-5" />
       <span className="text-sm font-medium">Talk to my AI version.</span>
-    </motion.button>
+    </button>
   );
 }
 
@@ -173,27 +160,23 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
   };
 
   return (
-    <AnimatePresence>
+    <>
       {isOpen && (
         <>
           {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 bg-background/60"
+          <div
+            className="animate-backdrop fixed inset-0 z-50 bg-background/60"
             onClick={onClose}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              onClose();
+            }}
           />
 
           {/* Modal */}
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+          <div
             className={cn(
-              "fixed bottom-24 right-6 z-50 w-[380px] max-w-[calc(100vw-48px)] overflow-hidden rounded-2xl",
+              "animate-modal fixed bottom-24 right-6 z-50 w-[380px] max-w-[calc(100vw-48px)] overflow-hidden rounded-2xl",
               "border border-border-soft bg-background shadow-2xl",
               "sm:right-6 sm:max-w-[380px]",
             )}
@@ -206,6 +189,10 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
               </div>
               <button
                 onClick={onClose}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  onClose();
+                }}
                 className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-muted hover:text-foreground"
                 aria-label="Close chat"
               >
@@ -217,32 +204,26 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
             <div className="h-[400px] overflow-y-auto px-4 py-4">
               <div className="flex flex-col gap-3">
                 {messages.map((message) => (
-                  <motion.div
+                  <div
                     key={message.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
                     className={cn(
-                      "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm",
+                      "animate-msg max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm",
                       message.role === "user"
                         ? "ml-auto bg-primary text-primary-foreground"
                         : "bg-surface-muted text-foreground",
                     )}
                   >
                     {message.content}
-                  </motion.div>
+                  </div>
                 ))}
                 {isLoading && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="max-w-[85%] rounded-2xl bg-surface-muted px-3.5 py-2.5 text-sm text-foreground"
-                  >
+                  <div className="animate-msg max-w-[85%] rounded-2xl bg-surface-muted px-3.5 py-2.5 text-sm text-foreground">
                     <span className="inline-flex items-center gap-1">
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-foreground" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-foreground delay-100" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-foreground delay-200" />
                     </span>
-                  </motion.div>
+                  </div>
                 )}
                 <div ref={messagesEndRef} />
               </div>
@@ -282,9 +263,9 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
                 </button>
               </div>
             </form>
-          </motion.div>
+          </div>
         </>
       )}
-    </AnimatePresence>
+    </>
   );
 }
