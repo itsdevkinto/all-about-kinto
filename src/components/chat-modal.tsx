@@ -36,6 +36,21 @@ interface ChatModalProps {
   onClose: () => void;
 }
 
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1") // **bold**
+    .replace(/\*(.+?)\*/g, "$1") // *italic*
+    .replace(/__(.+?)__/g, "$1") // __bold__
+    .replace(/~~(.+?)~~/g, "$1") // ~~strikethrough~~
+    .replace(/`(.+?)`/g, "$1") // `inline code`
+    .replace(/^#{1,6}\s+/gm, "") // # headers
+    .replace(/^\s*[-*+]\s+/gm, "") // - bullet points
+    .replace(/^\s*\d+\.\s+/gm, "") // 1. numbered lists
+    .replace(/\[(.+?)\]\(.+?\)/g, "$1") // [links](url)
+    .replace(/^>\s+/gm, "") // > blockquotes
+    .trim();
+}
+
 export function ChatModal({ isOpen, onClose }: ChatModalProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -141,7 +156,7 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
         {
           id: Date.now().toString(),
           role: "assistant",
-          content: data.response || "hmm, not sure what to say to that",
+          content: stripMarkdown(data.response || "hmm, not sure what to say to that"),
         },
       ]);
     } catch (error) {

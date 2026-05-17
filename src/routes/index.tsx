@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Github, Music2, Mail, Link as LinkIcon, Mic, Gamepad2 } from "lucide-react";
+import { Github, Music2, Mail, Link as LinkIcon, Mic, Gamepad2, DoorOpen } from "lucide-react";
 import { AmbientBackground } from "@/components/ambient-background";
 import { ChatButton, ChatModal } from "@/components/chat-modal";
 import { FloatingShell } from "@/components/floating-shell";
@@ -43,10 +43,10 @@ function Index() {
               delay={0.12}
             />
             <SystemLinkCard
-              icon={<Gamepad2 className="h-5 w-5" />}
-              label="Pokemon Office"
-              description="chat-driven pixel scene"
-              href="/coming-soon"
+              icon={<DoorOpen className="h-5 w-5" />}
+              label="The Room"
+              description="a quiet pixel space, late-night vibes"
+              href="/room"
               delay={0.15}
             />
             <SystemLinkCard

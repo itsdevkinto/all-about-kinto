@@ -9,13 +9,13 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as PokemonGameRouteImport } from './routes/pokemon-game'
+import { Route as RoomRouteImport } from './routes/room'
 import { Route as ComingSoonRouteImport } from './routes/coming-soon'
 import { Route as IndexRouteImport } from './routes/index'
 
-const PokemonGameRoute = PokemonGameRouteImport.update({
-  id: '/pokemon-game',
-  path: '/pokemon-game',
+const RoomRoute = RoomRouteImport.update({
+  id: '/room',
+  path: '/room',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ComingSoonRoute = ComingSoonRouteImport.update({
@@ -32,40 +32,40 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/coming-soon': typeof ComingSoonRoute
-  '/pokemon-game': typeof PokemonGameRoute
+  '/room': typeof RoomRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/coming-soon': typeof ComingSoonRoute
-  '/pokemon-game': typeof PokemonGameRoute
+  '/room': typeof RoomRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/coming-soon': typeof ComingSoonRoute
-  '/pokemon-game': typeof PokemonGameRoute
+  '/room': typeof RoomRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/coming-soon' | '/pokemon-game'
+  fullPaths: '/' | '/coming-soon' | '/room'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/coming-soon' | '/pokemon-game'
-  id: '__root__' | '/' | '/coming-soon' | '/pokemon-game'
+  to: '/' | '/coming-soon' | '/room'
+  id: '__root__' | '/' | '/coming-soon' | '/room'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ComingSoonRoute: typeof ComingSoonRoute
-  PokemonGameRoute: typeof PokemonGameRoute
+  RoomRoute: typeof RoomRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/pokemon-game': {
-      id: '/pokemon-game'
-      path: '/pokemon-game'
-      fullPath: '/pokemon-game'
-      preLoaderRoute: typeof PokemonGameRouteImport
+    '/room': {
+      id: '/room'
+      path: '/room'
+      fullPath: '/room'
+      preLoaderRoute: typeof RoomRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/coming-soon': {
@@ -88,7 +88,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ComingSoonRoute: ComingSoonRoute,
-  PokemonGameRoute: PokemonGameRoute,
+  RoomRoute: RoomRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
