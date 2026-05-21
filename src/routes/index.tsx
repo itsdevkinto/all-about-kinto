@@ -39,7 +39,7 @@ function Index() {
               icon={<LinkIcon className="h-5 w-5" />}
               label="Portfolio"
               description="selected work and case studies"
-              href="/coming-soon"
+              href="https://portfolio-site.yo-kinto-x.workers.dev/"
               delay={0.12}
             />
             <SystemLinkCard

@@ -69,7 +69,7 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   };
 
   useEffect(() => {
@@ -171,6 +171,7 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
       ]);
     } finally {
       setIsLoading(false);
+      setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
 
@@ -258,7 +259,7 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
                     "text-sm text-foreground placeholder:text-muted-foreground",
                     "focus:outline-none focus:ring-2 focus:ring-ring",
                   )}
-                  disabled={isLoading || (cooldownUntil !== null && Date.now() < cooldownUntil)}
+                  readOnly={isLoading || (cooldownUntil !== null && Date.now() < cooldownUntil)}
                 />
                 <button
                   type="submit"

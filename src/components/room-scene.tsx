@@ -26,12 +26,15 @@ type Interactable = {
   idleLines?: string[];
 };
 
+const REPEAT_LIMIT = 3; // how many bonus repeat interactions allowed after primary sequence
+
 // Dialogue state — module-level so it survives re-renders
 const dlgState: Record<
   string,
   {
     seqIdx: number;
     seqDone: boolean;
+    repeatCount: number; // how many repeat-line interactions have been used
     lastLine: string;
     idleCooldown: number; // timestamp (ms) before idle can trigger again
   }
@@ -203,11 +206,11 @@ const INTERACTABLES: Interactable[] = [
     h: 70,
     label: "desk",
     cx: 200,
-    cy: 188,
+    cy: 180,
     cw: 100,
-    ch: 14,
+    ch: 6,
     ix: 265,
-    iy: 245,
+    iy: 220,
     lines: [
       "the cursor is blinking back at me.",
       "another late commit. nobody's awake to review it.",
@@ -295,10 +298,11 @@ const INTERACTABLES: Interactable[] = [
     w: 24,
     h: 60,
     label: "guitar",
-    cx: 340,
-    cy: 224,
-    cw: 24,
-    ch: 8,
+    cx: 345,
+    cy: 186,
+    cw: 10,
+    ch: 4,
+    ix: 340,
     lines: [
       "the E string snapped again. third time this month.",
       "should probably change the whole set. intonation's off.",
@@ -351,10 +355,10 @@ const INTERACTABLES: Interactable[] = [
     w: 130,
     h: 80,
     label: "window",
-    cw: 0,
+    cw: 400,
     ch: 0,
     ix: 445,
-    iy: 220,
+    iy: 140,
     lines: [
       "it's quiet outside. the kind that hums.",
       "rain again. the city looks softer through it.",
@@ -407,10 +411,10 @@ const INTERACTABLES: Interactable[] = [
     w: 130,
     h: 100,
     label: "shelf",
-    cw: 0,
+    cw: 150,
     ch: 0,
     ix: 105,
-    iy: 230,
+    iy: 140,
     lines: [
       "books i keep meaning to finish.",
       "dust is its own kind of bookmark.",
@@ -507,14 +511,14 @@ const INTERACTABLES: Interactable[] = [
 
 // Solid walls/edges — only the actual wall area (above floor line at y=176)
 const STATIC_COLLIDERS = [
-  { x: 0, y: 0, w: WORLD_W, h: 176 }, // back wall + baseboard
+  { x: 0, y: 0, w: WORLD_W, h: 140 }, // back wall + baseboard
 ];
 
 // Explicit walkable waypoints (Pokemon-style navigation map)
 // These are grid positions the player can stand on. The pathfinder
 // uses A* on the grid, and these define the "floor" area.
 const FLOOR_RECTS = [
-  { x: 0, y: 176, w: WORLD_W, h: WORLD_H - 176 }, // main floor
+  { x: 0, y: 140, w: WORLD_W, h: WORLD_H - 140 }, // main floor
 ];
 
 // Pick random item from array, avoiding lastItem if possible
@@ -525,18 +529,28 @@ function pickRandom<T>(pool: T[], lastItem?: T): T {
 }
 
 // Tutorial sequence — shown only on first visit
-const TUTORIAL_LINES = [
+const getTutorialLines = (isMobile: boolean) => [
   { speaker: "—", text: "hey. welcome to my room." },
-  { speaker: "—", text: "click anywhere on the floor to walk around." },
-  { speaker: "—", text: "get close to something and press E — or tap the button — to interact." },
+  {
+    speaker: "—",
+    text: isMobile
+      ? "tap anywhere on the floor or use the D-pad to walk around."
+      : "click anywhere on the floor or press WASD to walk around.",
+  },
+  {
+    speaker: "—",
+    text: isMobile
+      ? "get close to something and tap the TALK button to interact."
+      : "get close to something and press E to interact.",
+  },
   { speaker: "—", text: "anyway. make yourself at home." },
 ];
 
 // Idle waypoint pool — valid floor positions the character drifts to during idle
 const IDLE_WAYPOINTS = [
-  { x: 265, y: 245 }, // desk area
-  { x: 445, y: 220 }, // window area
-  { x: 105, y: 250 }, // shelf area
+  { x: 205, y: 200 }, // desk area
+  { x: 445, y: 140 }, // window area
+  { x: 105, y: 140 }, // shelf area
   { x: 645, y: 240 }, // plant area
   { x: 350, y: 350 }, // center floor
   { x: 200, y: 420 }, // left floor
@@ -555,7 +569,10 @@ export function RoomScene() {
   const interactRef = useRef<(() => void) | null>(null);
   const dialogueRef = useRef<{ id: string; label: string; text: string } | null>(null);
   const skipTutorialRef = useRef<(() => void) | null>(null);
+  const wasdMoveRef = useRef<((dx: number, dy: number) => void) | null>(null);
+  const resetIdleRef = useRef<(() => void) | null>(null);
   const isMobile = useIsMobile();
+  const tutorialLines = getTutorialLines(isMobile);
   const [dialogue, setDialogue] = useState<{ id: string; label: string; text: string } | null>(
     null,
   );
@@ -568,12 +585,80 @@ export function RoomScene() {
   const musicLoopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.repeat || e.key.toLowerCase() !== "e") return;
-      interactRef.current?.();
+    const dirMap: Record<string, [number, number]> = {
+      w: [0, -1],
+      arrowup: [0, -1],
+      s: [0, 1],
+      arrowdown: [0, 1],
+      a: [-1, 0],
+      arrowleft: [-1, 0],
+      d: [1, 0],
+      arrowright: [1, 0],
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+
+    // Track held keys and their repeat intervals
+    const heldKeys = new Map<string, ReturnType<typeof setInterval>>();
+    const HOLD_DELAY = 150; // ms before repeat starts
+    const HOLD_INTERVAL = 0; // ms between steps while held
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (k === "e") {
+        if (!e.repeat) {
+          resetIdleRef.current?.();
+          interactRef.current?.();
+        }
+        return;
+      }
+      const dir = dirMap[k];
+      if (!dir) return;
+      e.preventDefault();
+      if (heldKeys.has(k)) return; // already held
+
+      // Reset idle on any key movement
+      resetIdleRef.current?.();
+      // Fire immediately on first press
+      wasdMoveRef.current?.(dir[0], dir[1]);
+
+      // Then after initial delay, repeat at interval
+      const timeout = setTimeout(() => {
+        const interval = setInterval(() => {
+          wasdMoveRef.current?.(dir[0], dir[1]);
+        }, HOLD_INTERVAL);
+        heldKeys.set(k, interval);
+      }, HOLD_DELAY);
+
+      // Store timeout id in the map temporarily (cast to same type)
+      heldKeys.set(k, timeout as unknown as ReturnType<typeof setInterval>);
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      const timer = heldKeys.get(k);
+      if (timer !== undefined) {
+        clearTimeout(timer as unknown as ReturnType<typeof setTimeout>);
+        clearInterval(timer);
+        heldKeys.delete(k);
+      }
+    };
+
+    const onWheel = () => {
+      resetIdleRef.current?.();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("wheel", onWheel, { passive: true });
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("wheel", onWheel);
+      heldKeys.forEach((timer) => {
+        clearTimeout(timer as unknown as ReturnType<typeof setTimeout>);
+        clearInterval(timer);
+      });
+      heldKeys.clear();
+    };
   }, []);
 
   // Keep dialogueRef in sync so Phaser scene can read it each frame
@@ -784,7 +869,7 @@ export function RoomScene() {
 
         // Idle behaviour state
         idleTimer = 0; // ms since last player input
-        readonly IDLE_THRESHOLD = 12000; // ms before idle kicks in
+        readonly IDLE_THRESHOLD = 6000; // ms before idle kicks in
         idleMode = false;
         idleWaitT = 0; // countdown for pause between wanders
         idleWaitDur = 0; // how long to pause (random)
@@ -804,6 +889,7 @@ export function RoomScene() {
           "right-2": "right-walk-2",
         };
         useSpriteSheet = true;
+        dlgGeneration = 0; // bumped on every new dialogue line; guards auto-dismiss delayedCall
 
         constructor() {
           super("room");
@@ -813,14 +899,23 @@ export function RoomScene() {
           if (!this.nearby) return;
           const it = this.nearby;
 
+          // Reset idle state on every explicit interaction
+          this.idleMode = false;
+          this.idleTimer = 0;
+          this.lastInputTime = Date.now();
+
           // Init state entry if missing
           if (!dlgState[it.id]) {
-            dlgState[it.id] = { seqIdx: 0, seqDone: false, lastLine: "", idleCooldown: 0 };
+            dlgState[it.id] = {
+              seqIdx: 0,
+              seqDone: false,
+              repeatCount: 0,
+              lastLine: "",
+              idleCooldown: 0,
+            };
           }
           const state = dlgState[it.id];
 
-          // If primary sequence is done, each subsequent press pulls a random repeat line
-          // but only if repeatLines exist — otherwise do nothing
           let text: string;
 
           if (!state.seqDone) {
@@ -829,33 +924,52 @@ export function RoomScene() {
             state.seqIdx++;
             if (state.seqIdx >= it.lines.length) {
               state.seqDone = true;
-              // Auto-dismiss after last primary line
+              // Auto-dismiss after last primary line — but only if no newer
+              // interaction has replaced it in the meantime
+              const gen = ++this.dlgGeneration;
               this.time.delayedCall(2800, () => {
-                setDialogue((cur) => (cur?.id === it.id ? null : cur));
+                if (this.dlgGeneration === gen) {
+                  setDialogue((cur) => (cur?.id === it.id ? null : cur));
+                }
               });
+            } else {
+              this.dlgGeneration++;
             }
+          } else if (
+            it.repeatLines &&
+            it.repeatLines.length > 0 &&
+            state.repeatCount < REPEAT_LIMIT
+          ) {
+            // Primary done — up to REPEAT_LIMIT bonus interactions from repeatLines
+            text = pickRandom(it.repeatLines, state.lastLine);
+            state.repeatCount++;
+            this.dlgGeneration++;
           } else {
-            // Primary sequence done — dismiss on further E presses, don't loop
+            // Fully exhausted — dismiss if open, go silent
             setDialogue(null);
             return;
           }
 
           state.lastLine = text;
-          // Reset idle cooldown so we don't immediately get an idle comment
           state.idleCooldown = Date.now() + 15_000;
-
           setDialogue({ id: it.id, label: it.label, text });
         }
 
         // Emit an autonomous idle comment for an object (called by idle system)
         emitIdleDialogue(it: Interactable, isIdleWalk = false) {
           if (!dlgState[it.id]) {
-            dlgState[it.id] = { seqIdx: 0, seqDone: false, lastLine: "", idleCooldown: 0 };
+            dlgState[it.id] = {
+              seqIdx: 0,
+              seqDone: false,
+              repeatCount: 0,
+              lastLine: "",
+              idleCooldown: 0,
+            };
           }
           const state = dlgState[it.id];
           if (Date.now() < state.idleCooldown) return;
 
-          const pool = it.idleLines ?? it.repeatLines ?? it.lines;
+          const pool = [...it.lines, ...(it.repeatLines ?? []), ...(it.idleLines ?? [])];
           const text = pickRandom(pool, state.lastLine);
           state.lastLine = text;
           // Desk gets a much shorter cooldown so he keeps muttering while coding
@@ -864,8 +978,11 @@ export function RoomScene() {
 
           setDialogue({ id: it.id, label: it.label, text });
           // Auto-dismiss idle dialogue after 3s
+          const gen = ++this.dlgGeneration;
           this.time.delayedCall(3000, () => {
-            setDialogue((cur) => (cur?.id === it.id ? null : cur));
+            if (this.dlgGeneration === gen) {
+              setDialogue((cur) => (cur?.id === it.id ? null : cur));
+            }
           });
         }
 
@@ -965,8 +1082,9 @@ export function RoomScene() {
           this.add.rectangle(236, 34, 62, 48, 0xc8a878).setOrigin(0);
           this.add.rectangle(238, 36, 58, 44, 0x3a4d44).setOrigin(0);
           // mountain silhouette
-          this.add.triangle(238, 70, 12, 60, 28, 38, 44, 60, 0x1d2a23).setOrigin(0);
-          this.add.triangle(238, 70, 28, 60, 44, 36, 60, 60, 0x2a3a30).setOrigin(0);
+          this.add.triangle(226, 36, 12, 44, 28, 22, 44, 44, 0x1d2a23).setOrigin(0);
+          this.add.triangle(226, 36, 28, 44, 44, 20, 60, 44, 0x2a3a30).setOrigin(0);
+
           // moon in art
           this.add.circle(282, 48, 5, 0xe6dcc4, 0.95);
           // small frame
@@ -1168,9 +1286,9 @@ export function RoomScene() {
           // ============ DESK + COMPUTER (smaller monitor) ============
           const pc = INTERACTABLES.find((i) => i.id === "pc")!;
           const deskX = 200;
-          const deskY = 188;
+          const deskY = 168;
           const deskW = 130;
-          const deskH = 14;
+          const deskH = 34;
           // desk top (with edge)
           this.add.rectangle(deskX, deskY, deskW, deskH, 0x3a2618).setOrigin(0);
           this.add.rectangle(deskX, deskY, deskW, 2, 0x6b4a30).setOrigin(0);
@@ -1179,8 +1297,8 @@ export function RoomScene() {
           this.add.rectangle(deskX + 4, deskY + deskH, 6, 38, 0x1a110a).setOrigin(0);
           this.add.rectangle(deskX + deskW - 10, deskY + deskH, 6, 38, 0x1a110a).setOrigin(0);
           // drawer
-          this.add.rectangle(deskX + 16, deskY + deskH + 2, 50, 18, 0x2d1d12).setOrigin(0);
-          this.add.circle(deskX + 41, deskY + deskH + 11, 1.5, 0xc8a878);
+          this.add.rectangle(deskX + 81, deskY + deskH + 0, 40, 30, 0x2d1d12).setOrigin(0);
+          this.add.circle(deskX + 101, deskY + deskH + 11, 1.5, 0xc8a878);
 
           // monitor (smaller, modern slim)
           const mx = pc.x + 4;
@@ -1219,9 +1337,9 @@ export function RoomScene() {
           this.add.ellipse(pc.x + 56, pc.y + 56, 8, 11, 0x1a120c);
 
           // mug w/ steam
-          this.add.rectangle(pc.x - 18, pc.y + 46, 10, 12, 0x6b3a1f).setOrigin(0);
-          this.add.rectangle(pc.x - 8, pc.y + 49, 3, 6, 0x6b3a1f).setOrigin(0);
-          this.add.rectangle(pc.x - 18, pc.y + 46, 10, 2, 0x2a1d12).setOrigin(0);
+          this.add.rectangle(pc.x - 18, pc.y + 46, 10, 12, 0x242323).setOrigin(0);
+          this.add.rectangle(pc.x - 8, pc.y + 49, 3, 6, 0x474544).setOrigin(0);
+          this.add.rectangle(pc.x - 18, pc.y + 46, 10, 2, 0x474544).setOrigin(0);
           // steam wisps
           this.add.rectangle(pc.x - 14, pc.y + 42, 1, 2, 0xf0e8d8, 0.4).setOrigin(0);
           this.add.rectangle(pc.x - 12, pc.y + 38, 1, 2, 0xf0e8d8, 0.3).setOrigin(0);
@@ -1238,7 +1356,7 @@ export function RoomScene() {
           this.lampGlow = this.add.graphics();
 
           // chair tucked under desk (looks like drawer)
-          this.add.rectangle(deskX + deskW / 2 - 10, deskY + deskH, 20, 12, 0x1a1a1a).setOrigin(0);
+          this.add.rectangle(deskX + deskW / 2 - 4, deskY + deskH, 20, 12, 0x1a1a1a).setOrigin(0);
 
           // ============ GUITAR (Stratocaster, black body + white pickguard, beside desk) ============
           const gt = INTERACTABLES.find((i) => i.id === "guitar")!;
@@ -1622,7 +1740,7 @@ export function RoomScene() {
 
             // Clamp to walkable floor area
             let targetX = Phaser.Math.Clamp(wp.x, 24, WORLD_W - 24);
-            let targetY = Phaser.Math.Clamp(wp.y, 200, WORLD_H - 24);
+            let targetY = Phaser.Math.Clamp(wp.y, 140, WORLD_H - 24);
 
             // Snap target to nearest walkable grid tile
             if (this.pathFinder.isBlocked(targetX, targetY)) {
@@ -1666,6 +1784,44 @@ export function RoomScene() {
 
           interactRef.current = () => this.interactNearby();
 
+          resetIdleRef.current = () => {
+            this.idleMode = false;
+            this.idleTimer = 0;
+            this.lastInputTime = Date.now();
+          };
+
+          wasdMoveRef.current = (dx: number, dy: number) => {
+            // Dismiss dialogue first
+            if (dialogueRef.current) {
+              setDialogue(null);
+              return;
+            }
+            // Block if already walking
+            if (this.tileMoving || this.walkQueue.length > 0) return;
+            // Reset idle
+            this.idleMode = false;
+            this.idleTimer = 0;
+            this.lastInputTime = Date.now();
+            skipTutorialRef.current?.();
+            // Current grid position
+            const [cgx, cgy] = this.gridPos(this.player.x, this.player.y);
+            const ngx = cgx + dx;
+            const ngy = cgy + dy;
+            // Clamp to world bounds
+            if (
+              ngx < 0 ||
+              ngy < 0 ||
+              ngx >= Math.ceil(WORLD_W / GRID_SIZE) ||
+              ngy >= Math.ceil(WORLD_H / GRID_SIZE)
+            )
+              return;
+            const [wx, wy] = this.worldPos(ngx, ngy);
+            if (wy < 140) return; // above walkable floor
+            if (this.pathFinder.isBlocked(wx, wy)) return;
+            this.walkQueue = [[ngx, ngy]];
+            this.startNextTile();
+          };
+
           // Tutorial: show first line after a short delay (first visit only)
           const hasSeen =
             typeof sessionStorage !== "undefined" && sessionStorage.getItem("roomTutDone");
@@ -1680,7 +1836,7 @@ export function RoomScene() {
         walkTo(wx: number, wy: number) {
           if (this.tileMoving && this.tileT / this.TILE_DURATION < 0.6) return;
           let targetX = Phaser.Math.Clamp(wx, 24, WORLD_W - 24);
-          let targetY = Phaser.Math.Clamp(wy, 200, WORLD_H - 24);
+          let targetY = Phaser.Math.Clamp(wy, 140, WORLD_H - 24);
           if (this.pathFinder.isBlocked(targetX, targetY)) {
             const nearest = this.pathFinder.findNearestWalkable(targetX, targetY, 150);
             if (!nearest) return;
@@ -1881,6 +2037,10 @@ export function RoomScene() {
             }
           }
           if (near?.id !== this.nearby?.id) {
+            // Reset repeat quota when walking away from an object so next visit gets fresh interactions
+            if (this.nearby && dlgState[this.nearby.id]) {
+              dlgState[this.nearby.id].repeatCount = 0;
+            }
             this.nearby = near;
             setNearbyTarget(near ? { id: near.id, label: near.label } : null);
             const nearId = near?.id;
@@ -1924,7 +2084,7 @@ export function RoomScene() {
               if (!dialogueRef.current) this.idleWaitT += dt;
               // Stay at desk longer (6–10s) vs other spots (1.5–4s)
               const atDesk = this.nearby?.id === "pc";
-              const waitCap = atDesk ? 6000 + Math.random() * 4000 : 1500 + Math.random() * 2500;
+              const waitCap = atDesk ? 8000 + Math.random() * 4000 : 1500 + Math.random() * 2500;
               if (this.idleWaitDur === 0) this.idleWaitDur = waitCap;
 
               if (!dialogueRef.current && this.idleWaitT >= this.idleWaitDur) {
@@ -1940,7 +2100,7 @@ export function RoomScene() {
                     const cooldownOk = !s || Date.now() >= s.idleCooldown;
                     const hasIdle = (it.idleLines?.length ?? 0) > 0;
                     if (hasIdle && cooldownOk) {
-                      const weight = it.id === "pc" ? 3 : 1;
+                      const weight = it.id === "pc" ? 4 : 1;
                       for (let w = 0; w < weight; w++) candidates.push(it);
                     }
                   }
@@ -1964,14 +2124,8 @@ export function RoomScene() {
           // Animations
           this.glowT += dt * 0.001;
           const pc = INTERACTABLES.find((i) => i.id === "pc")!;
-          this.monitorGlow.clear();
-          const a = 0.22 + Math.sin(this.glowT * 1.5) * 0.05;
-          this.monitorGlow.fillStyle(0xa8d4b8, a);
-          this.monitorGlow.fillCircle(pc.x + 26, pc.y + 24, 50);
 
           this.lampGlow.clear();
-          this.lampGlow.fillStyle(0xf2c878, 0.2);
-          this.lampGlow.fillCircle(pc.x - 10, pc.y + 24, 50);
           this.lampGlow.fillStyle(0xf2c878, 0.32);
           this.lampGlow.fillCircle(pc.x - 10, pc.y + 24, 20);
 
@@ -2058,7 +2212,7 @@ export function RoomScene() {
   const advanceTutorial = () => {
     if (tutorialStep === null) return;
     const next = tutorialStep + 1;
-    if (next >= TUTORIAL_LINES.length) {
+    if (next >= tutorialLines.length) {
       setTutorialStep(null);
       if (typeof sessionStorage !== "undefined") sessionStorage.setItem("roomTutDone", "1");
     } else {
@@ -2076,7 +2230,7 @@ export function RoomScene() {
       {/* Game canvas */}
       <div
         ref={containerRef}
-        className="relative aspect-[720/520] w-full cursor-pointer overflow-hidden rounded-2xl border border-border-soft bg-[#14100c] shadow-panel"
+        className="relative aspect-720/520 w-full cursor-pointer overflow-hidden rounded-2xl border border-border-soft bg-[#14100c] shadow-panel"
         style={{ filter: "saturate(0.92) contrast(1.06)" }}
       />
 
@@ -2088,19 +2242,19 @@ export function RoomScene() {
       )}
 
       {/* ── Tutorial overlay ── shown only on first visit */}
-      {tutorialStep !== null && TUTORIAL_LINES[tutorialStep] && (
+      {tutorialStep !== null && tutorialLines[tutorialStep] && (
         <motion.div
           key={tutorialStep}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
-          className="absolute inset-x-3 bottom-3 z-20 rounded-xl border border-white/10 bg-black/85 px-4 py-3 backdrop-blur"
+          className="absolute inset-x-3 md:bottom-12 bottom-57 z-20 rounded-xl border border-white/10 bg-black/85 px-4 py-3 backdrop-blur"
         >
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1">
               <div className="text-[10px] uppercase tracking-[0.18em] text-white/35">intro</div>
               <div className="mt-1 text-[13px] leading-snug text-white/90">
-                {TUTORIAL_LINES[tutorialStep].text}
+                {tutorialLines[tutorialStep].text}
               </div>
             </div>
           </div>
@@ -2114,7 +2268,7 @@ export function RoomScene() {
                 "transition hover:bg-white/18 active:scale-[0.97]",
               )}
             >
-              {tutorialStep < TUTORIAL_LINES.length - 1 ? (
+              {tutorialStep < tutorialLines.length - 1 ? (
                 <>
                   <span>next</span>
                   <span className="text-white/40">▶</span>
@@ -2131,7 +2285,7 @@ export function RoomScene() {
               skip
             </button>
             <span className="ml-auto text-[10px] text-white/25">
-              {tutorialStep + 1} / {TUTORIAL_LINES.length}
+              {tutorialStep + 1} / {tutorialLines.length}
             </span>
           </div>
         </motion.div>
@@ -2146,48 +2300,31 @@ export function RoomScene() {
           exit={{ opacity: 0, y: -6 }}
           className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center"
         >
-          {isMobile ? (
-            <button
-              type="button"
-              style={{ pointerEvents: "auto" }}
-              onClick={() => interactRef.current?.()}
-              className={cn(
-                "flex items-center gap-2 rounded-full",
-                "border border-white/20 bg-black/70 px-3 py-1.5 backdrop-blur",
-                "text-[11px] text-white/90 transition active:scale-[0.97]",
-              )}
-            >
-              <span className="rounded-md border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
-                tap
-              </span>
-              <span className="tracking-wide">{nearbyTarget.label}</span>
-            </button>
-          ) : (
-            <div
-              className={cn(
-                "flex items-center gap-2 rounded-full",
-                "border border-white/15 bg-black/60 px-3 py-1.5 backdrop-blur",
-                "text-[11px] tracking-wide text-white/80",
-              )}
-            >
+          <div
+            className={cn(
+              "flex items-center md:gap-2 rounded-full",
+              "border border-white/15 bg-black/60 px-3 py-1.5 backdrop-blur",
+              "text-[11px] tracking-wide text-white/80",
+            )}
+          >
+            <span className="text-white/55">{isMobile ? "" : "press"}</span>
+            {!isMobile && (
               <span className="rounded-md border border-white/20 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
                 E
               </span>
-              <span className="text-white/55">to interact —</span>
-              <span className="text-white/90">{nearbyTarget.label}</span>
-            </div>
-          )}
+            )}
+            <span className="text-white/90">{nearbyTarget.label}</span>
+          </div>
         </motion.div>
       )}
 
-      {/* ── Dialogue box — bottom, Next button on mobile ── */}
+      {/* ── Dialogue box — top, inside canvas ── */}
       {dialogue && tutorialStep === null && (
-        <div className="absolute inset-x-3 bottom-3 z-10 rounded-xl border border-white/10 bg-black/80 px-4 py-3 backdrop-blur">
+        <div className="absolute inset-x-3 md:bottom-12 bottom-57 z-10 rounded-xl border border-white/10 bg-black/80 px-4 py-3 backdrop-blur">
           <div className="flex items-center justify-between">
             <div className="text-[10px] uppercase tracking-[0.18em] text-white/40">
               {dialogue.label}
             </div>
-            {/* Dismiss button */}
             <button
               type="button"
               onClick={() => setDialogue(null)}
@@ -2198,42 +2335,146 @@ export function RoomScene() {
             </button>
           </div>
           <div className="mt-1 text-[13px] leading-snug text-white/90">{dialogue.text}</div>
-          {isMobile ? (
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => interactRef.current?.()}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-lg border border-white/15",
-                  "bg-white/10 px-3 py-1 text-[11px] text-white/80",
-                  "transition active:scale-[0.97] active:bg-white/20",
-                )}
-              >
-                <span>next</span>
-                <span className="text-white/40">▶</span>
-              </button>
-              <span className="text-[10px] text-white/25">tap next or walk away</span>
-            </div>
-          ) : (
-            <div className="mt-1 text-[10px] text-white/30">
-              press E for next · walk away to dismiss
-            </div>
-          )}
+          <div className="mt-1 text-[10px] text-white/30">
+            {isMobile
+              ? "tap talk to continue · tap floor to dismiss"
+              : "press E for next · tap floor to dismiss"}
+          </div>
         </div>
       )}
 
+      {/* ── Mobile d-pad + interact — BELOW the canvas, after bottom bar ── */}
+      {/* (removed from absolute overlay — now in normal flow below) */}
+
       {/* ── Bottom bar ── music toggle + movement hint ── */}
       <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>click floor to walk</span>
+        <span>{isMobile ? "tap floor · D-pad to move" : "click floor · WASD to move"}</span>
         <button
           type="button"
           onClick={() => setMusicOn((v) => !v)}
-          className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-[11px] text-white/60 transition hover:bg-black/50 hover:text-white/80"
+          className="
+            flex items-center gap-1.5 
+            bg-black/60
+            rounded-full border border-white/10 
+            md:bg-black/30 px-2.5 py-1 
+            text-[11px] text-white transition 
+            md:hover:bg-black/60 md:hover:text-white/80"
         >
           <span>{musicOn ? "♪" : "♩"}</span>
           <span>{musicOn ? "music on" : "music off"}</span>
         </button>
-        <span>{isMobile ? "tap when close" : "press E when close"}</span>
+        <span>{isMobile ? "press TALK when close" : "press E when close"}</span>
+      </div>
+
+      {/* ── Mobile controls row — below bottom bar text ── */}
+      {isMobile && ready && (
+        <DPadControls
+          wasdMoveRef={wasdMoveRef}
+          interactRef={interactRef}
+          nearbyTarget={nearbyTarget}
+        />
+      )}
+    </div>
+  );
+}
+
+// D-pad extracted into its own stable component so timer refs never get
+// recreated on parent re-renders (dialogue open/close, etc.)
+function DPadControls({
+  wasdMoveRef,
+  interactRef,
+  nearbyTarget,
+}: {
+  wasdMoveRef: React.RefObject<((dx: number, dy: number) => void) | null>;
+  interactRef: React.RefObject<(() => void) | null>;
+  nearbyTarget: { id: string; label: string } | null;
+}) {
+  const HOLD_DELAY = 150;
+  const HOLD_INTERVAL = 120;
+
+  // One stable ref per direction — never recreated
+  const upTimer = useRef<{
+    t: ReturnType<typeof setTimeout> | null;
+    i: ReturnType<typeof setInterval> | null;
+  }>({ t: null, i: null });
+  const downTimer = useRef<{
+    t: ReturnType<typeof setTimeout> | null;
+    i: ReturnType<typeof setInterval> | null;
+  }>({ t: null, i: null });
+  const leftTimer = useRef<{
+    t: ReturnType<typeof setTimeout> | null;
+    i: ReturnType<typeof setInterval> | null;
+  }>({ t: null, i: null });
+  const rightTimer = useRef<{
+    t: ReturnType<typeof setTimeout> | null;
+    i: ReturnType<typeof setInterval> | null;
+  }>({ t: null, i: null });
+
+  const start = (ref: typeof upTimer, dx: number, dy: number) => {
+    stop(ref); // safety: clear any previous
+    wasdMoveRef.current?.(dx, dy);
+    ref.current.t = setTimeout(() => {
+      ref.current.i = setInterval(() => {
+        wasdMoveRef.current?.(dx, dy);
+      }, HOLD_INTERVAL);
+    }, HOLD_DELAY);
+  };
+
+  const stop = (ref: typeof upTimer) => {
+    if (ref.current.t !== null) {
+      clearTimeout(ref.current.t);
+      ref.current.t = null;
+    }
+    if (ref.current.i !== null) {
+      clearInterval(ref.current.i);
+      ref.current.i = null;
+    }
+  };
+
+  const btn = (ref: typeof upTimer, dx: number, dy: number, icon: string, className: string) => (
+    <button
+      type="button"
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start(ref, dx, dy);
+      }}
+      onPointerUp={() => stop(ref)}
+      onPointerCancel={() => stop(ref)}
+      onPointerLeave={() => stop(ref)}
+      className={`${className} flex size-12 items-center justify-center rounded-md border-4 border-white/15 bg-black/60 text-[12px] text-white active:border-blue-600/70 active:text-white`}
+    >
+      {icon}
+    </button>
+  );
+
+  return (
+    <div className="mt-12 flex items-center justify-between px-1 select-none">
+      {/* D-pad */}
+      <div className="relative ml-4 size-34">
+        {btn(upTimer, 0, -1, "▲", "absolute left-1/2 top-0 -translate-x-1/2")}
+        {btn(leftTimer, -1, 0, "◀", "absolute left-0 top-1/2 -translate-y-1/2")}
+        {btn(rightTimer, 1, 0, "▶", "absolute right-0 top-1/2 -translate-y-1/2")}
+        {btn(downTimer, 0, 1, "▼", "absolute bottom-0 left-1/2 -translate-x-1/2")}
+      </div>
+
+      {/* Interact button */}
+      <div className="flex mr-4 flex-col items-center gap-1.5">
+        <button
+          type="button"
+          onPointerDown={() => interactRef.current?.()}
+          className={cn(
+            "flex h-16 w-30 items-center mt-6 justify-center rounded-4xl",
+            "border-4 border-white/20 bg-black/60",
+            "text-[11px] font-semibold uppercase tracking-widest text-white/70",
+            "shadow-inner active:scale-95 active:border-blue-600/75 active:text-white",
+            "transition-all duration-75",
+            nearbyTarget ? "border-white/35 text-white/90" : "opacity-90",
+          )}
+          aria-label="interact"
+        >
+          talk
+        </button>
+        <span className="text-[9px] text-white/25 tracking-wider uppercase">interact</span>
       </div>
     </div>
   );

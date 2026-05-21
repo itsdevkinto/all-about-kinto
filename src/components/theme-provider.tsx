@@ -47,6 +47,28 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [theme]);
 
+  // Append theme param to outbound secondary domain links on click
+  useEffect(() => {
+    const SECONDARY_DOMAIN = "portfolio-site.yo-kinto-x.workers.dev"; // target destination site
+    const handler = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest('a') as HTMLAnchorElement | null;
+      if (!anchor) return;
+      const href = anchor.getAttribute('href');
+      if (!href) return;
+      try {
+        const url = new URL(href, location.origin);
+        if (url.hostname !== SECONDARY_DOMAIN) return;
+        const currentTheme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+        url.searchParams.set('theme', currentTheme);
+        anchor.href = url.toString();
+      } catch {
+        // Invalid URL, ignore
+      }
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, []);
+
   return (
     <ThemeContext.Provider
       value={{
