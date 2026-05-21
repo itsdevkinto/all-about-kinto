@@ -1,6 +1,6 @@
 import { NativePanel } from "./native-panel";
 import { Button } from "./ui/button";
-import avatar from "@/assets/avatar.jpg";
+import avatar from "@/assets/avatar.png";
 import { Mail } from "lucide-react";
 
 export function IdentityCard() {
@@ -11,8 +11,8 @@ export function IdentityCard() {
           <img
             src={avatar}
             alt="Profile"
-            width={256}
-            height={256}
+            width={772}
+            height={768}
             className="h-full w-full object-cover"
           />
         </div>
