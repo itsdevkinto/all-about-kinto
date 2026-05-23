@@ -1,6 +1,6 @@
 import { NativePanel } from "./native-panel";
 import { Button } from "./ui/button";
-import avatar from "@/assets/avatar.png";
+import avatar from "@/assets/avatar.jpg";
 import { Mail } from "lucide-react";
 
 export function IdentityCard() {

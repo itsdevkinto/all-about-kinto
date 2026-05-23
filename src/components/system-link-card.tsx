@@ -66,7 +66,7 @@ export function SystemLinkCard({
 
   const className = cn(
     "glass group relative flex items-center gap-4 rounded-2xl border border-border-soft transition-transform duration-600 ease-[cubic-bezier(0.15,1,0.25,1)] will-change-transform",
-    "hover:-translate-y-1 hover:scale-105 hover:border-border hover:shadow-[0_16px_48px_-8px_var(--lamp-color-strong)] active:translate-y-0 active:scale-100 active:duration-100",
+    "md:hover:-translate-y-1 md:hover:scale-105 md:hover:border-border md:hover:shadow-[0_16px_48px_-8px_var(--lamp-color-strong)] active:scale-[0.96] active:border-border shadow-[0_8px_24px_-4px_var(--lamp-color-strong)] active:duration-50",
     isLarge ? "px-5 py-5" : "px-4 py-3.5",
   );
 
